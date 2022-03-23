@@ -29,10 +29,6 @@
 
 #ifdef WITH_UPDATE_CHECKER
 
-#ifdef _MSC_VER
-#pragma warning(disable : 4250) // 'boost::asio::basic_socket_iostream<Protocol>' : inherits 'std::basic_ostream<_Elem,_Traits>::std::basic_ostream<_Elem,_Traits>::_Add_vtordisp2' via dominance
-#endif
-
 #include "compat.h"
 #include "format.h"
 #include "options.h"
@@ -45,8 +41,9 @@
 #include <libaegisub/scoped_ptr.h>
 #include <libaegisub/split.h>
 
+#include <boost/json.hpp>
 #include <ctime>
-#include <boost/asio/ip/tcp.hpp>
+#include <curl/curl.h>
 #include <functional>
 #include <mutex>
 #include <vector>
@@ -172,166 +169,57 @@ void PostErrorEvent(bool interactive, wxString const& error_text) {
 	}
 }
 
-static const char * GetOSShortName() {
-	int osver_maj, osver_min;
-	wxOperatingSystemId osid = wxGetOsVersion(&osver_maj, &osver_min);
+size_t writeToJson(char* contents, size_t size, size_t nmemb, boost::json::stream_parser* stream_parser)
+{
+	boost::json::error_code error_code;
+    stream_parser->write(contents, size * nmemb, error_code);
+	if(error_code)
+        throw VersionCheckError(from_wx(_("Parsing update json failed.")));
 
-	if (osid & wxOS_WINDOWS_NT) {
-		if (osver_maj == 5 && osver_min == 0)
-			return "win2k";
-		else if (osver_maj == 5 && osver_min == 1)
-			return "winxp";
-		else if (osver_maj == 5 && osver_min == 2)
-			return "win2k3"; // this is also xp64
-		else if (osver_maj == 6 && osver_min == 0)
-			return "win60"; // vista and server 2008
-		else if (osver_maj == 6 && osver_min == 1)
-			return "win61"; // 7 and server 2008r2
-		else if (osver_maj == 6 && osver_min == 2)
-			return "win62"; // 8
-		else
-			return "windows"; // future proofing? I doubt we run on nt4
-	}
-	// CF returns 0x10 for some reason, which wx has recently started
-	// turning into 10
-	else if (osid & wxOS_MAC_OSX_DARWIN && (osver_maj == 0x10 || osver_maj == 10)) {
-		// ugliest hack in the world? nah.
-		static char osxstring[] = "osx00";
-		char minor = osver_min >> 4;
-		char patch = osver_min & 0x0F;
-		osxstring[3] = minor + ((minor<=9) ? '0' : ('a'-1));
-		osxstring[4] = patch + ((patch<=9) ? '0' : ('a'-1));
-		return osxstring;
-	}
-	else if (osid & wxOS_UNIX_LINUX)
-		return "linux";
-	else if (osid & wxOS_UNIX_FREEBSD)
-		return "freebsd";
-	else if (osid & wxOS_UNIX_OPENBSD)
-		return "openbsd";
-	else if (osid & wxOS_UNIX_NETBSD)
-		return "netbsd";
-	else if (osid & wxOS_UNIX_SOLARIS)
-		return "solaris";
-	else if (osid & wxOS_UNIX_AIX)
-		return "aix";
-	else if (osid & wxOS_UNIX_HPUX)
-		return "hpux";
-	else if (osid & wxOS_UNIX)
-		return "unix";
-	else if (osid & wxOS_OS2)
-		return "os2";
-	else if (osid & wxOS_DOS)
-		return "dos";
-	else
-		return "unknown";
-}
-
-#ifdef WIN32
-typedef BOOL (WINAPI * PGetUserPreferredUILanguages)(DWORD dwFlags, PULONG pulNumLanguages, wchar_t *pwszLanguagesBuffer, PULONG pcchLanguagesBuffer);
-
-// Try using Win 6+ functions if available
-static wxString GetUILanguage() {
-	agi::scoped_holder<HMODULE, BOOL (__stdcall *)(HMODULE)> kernel32(LoadLibraryW(L"kernel32.dll"), FreeLibrary);
-	if (!kernel32) return "";
-
-	PGetUserPreferredUILanguages gupuil = (PGetUserPreferredUILanguages)GetProcAddress(kernel32, "GetUserPreferredUILanguages");
-	if (!gupuil) return "";
-
-	ULONG numlang = 0, output_len = 0;
-	if (gupuil(MUI_LANGUAGE_NAME, &numlang, 0, &output_len) != TRUE || !output_len)
-		return "";
-
-	std::vector<wchar_t> output(output_len);
-	if (!gupuil(MUI_LANGUAGE_NAME, &numlang, &output[0], &output_len) || numlang < 1)
-		return "";
-
-	// We got at least one language, just treat it as the only, and a null-terminated string
-	return &output[0];
-}
-
-static wxString GetSystemLanguage() {
-	wxString res = GetUILanguage();
-	if (!res)
-		// On an old version of Windows, let's just return the LANGID as a string
-		res = fmt_wx("x-win%04x", GetUserDefaultUILanguage());
-
-	return res;
-}
-#elif __APPLE__
-static wxString GetSystemLanguage() {
-	CFLocaleRef locale = CFLocaleCopyCurrent();
-	CFStringRef localeName = (CFStringRef)CFLocaleGetValue(locale, kCFLocaleIdentifier);
-
-	char buf[128] = { 0 };
-	CFStringGetCString(localeName, buf, sizeof buf, kCFStringEncodingUTF8);
-	CFRelease(locale);
-
-	return wxString::FromUTF8(buf);
-
-}
-#else
-static wxString GetSystemLanguage() {
-	return wxLocale::GetLanguageInfo(wxLocale::GetSystemLanguage())->CanonicalName;
-}
-#endif
-
-static wxString GetAegisubLanguage() {
-	return to_wx(OPT_GET("App/Language")->GetString());
+	return size * nmemb;
 }
 
 void DoCheck(bool interactive) {
-	boost::asio::ip::tcp::iostream stream;
-	stream.connect(UPDATE_CHECKER_SERVER, "http");
-	if (!stream)
-		throw VersionCheckError(from_wx(_("Could not connect to updates server.")));
 
-	agi::format(stream,
-		"GET %s?rev=%d&rel=%d&os=%s&lang=%s&aegilang=%s HTTP/1.0\r\n"
-		"User-Agent: Aegisub %s\r\n"
-		"Host: %s\r\n"
-		"Accept: */*\r\n"
-		"Connection: close\r\n\r\n"
-		, UPDATE_CHECKER_BASE_URL
-		, GetSVNRevision()
-		, (GetIsOfficialRelease() ? 1 : 0)
-		, GetOSShortName()
-		, GetSystemLanguage()
-		, GetAegisubLanguage()
-		, GetAegisubLongVersionString()
-		, UPDATE_CHECKER_SERVER);
+	CURL *curl;
+	CURLcode res_code;
+	
+	curl = curl_easy_init();
+	if(!curl)
+		throw VersionCheckError(from_wx(_("Curl could not be initialized.")));
 
-	std::string http_version;
-	stream >> http_version;
-	int status_code;
-	stream >> status_code;
-	if (!stream || http_version.substr(0, 5) != "HTTP/")
-		throw VersionCheckError(from_wx(_("Could not download from updates server.")));
-	if (status_code != 200)
-		throw VersionCheckError(agi::format(_("HTTP request failed, got HTTP response %d."), status_code));
+	curl_easy_setopt(curl, CURLOPT_URL, UPDATE_ENDPOINT);
+	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+	curl_easy_setopt(curl, CURLOPT_USERAGENT, "Aegisub");
 
-	stream.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+	boost::json::stream_parser stream_parser;
+	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeToJson);
+	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &stream_parser);
 
-	// Skip the headers since we don't care about them
-	for (auto const& header : agi::line_iterator<std::string>(stream))
-		if (header.empty()) break;
+	res_code = curl_easy_perform(curl);
+	if(res_code != CURLE_OK)
+		throw VersionCheckError(agi::format(_("Checking for updates failed: %s."), curl_easy_strerror(res_code)));
 
+	curl_easy_cleanup(curl);
+
+	boost::json::error_code error_code;
+	stream_parser.finish(error_code);
+	if(error_code)
+		throw VersionCheckError(from_wx(_("Parsing update json failed.")));
+
+	boost::json::array release_info = stream_parser.release().as_array();
 	std::vector<AegisubUpdateDescription> results;
-	for (auto const& line : agi::line_iterator<std::string>(stream)) {
-		if (line.empty()) continue;
+	for (std::size_t i = 0; i < release_info.size(); ++i) {
 
-		std::vector<std::string> parsed;
-		agi::Split(parsed, line, '|');
-		if (parsed.size() != 6) continue;
+		boost::json::object release = release_info[i].as_object();
 
-		if (atoi(parsed[1].c_str()) <= GetSVNRevision())
+		if (release.at("svnRevision").as_int64() < GetSVNRevision())
 			continue;
 
-		// 0 and 2 being things that never got used
 		results.push_back(AegisubUpdateDescription{
-			inline_string_decode(parsed[3]),
-			inline_string_decode(parsed[4]),
-			inline_string_decode(parsed[5])
+			boost::json::value_to< std::string >(release.at("url")),
+			boost::json::value_to< std::string >(release.at("name")),
+			boost::json::value_to< std::string >(release.at("body"))
 		});
 	}
 

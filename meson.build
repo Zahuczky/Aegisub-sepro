@@ -59,6 +59,7 @@ if get_option('credit') != ''
     conf.set_quoted('BUILD_CREDIT', get_option('credit'))
 endif
 conf.set('WITH_UPDATE_CHECKER', get_option('enable_update_checker'))
+conf.set_quoted('UPDATE_ENDPOINT', get_option('update_endpoint'))
 
 deps = []
 deps_inc = []
@@ -88,9 +89,9 @@ deps += iconv_dep
 deps += dependency('libass', version: '>=0.9.7',
                    fallback: ['libass', 'libass_dep'])
 
-boost_modules = ['chrono', 'filesystem', 'thread', 'locale', 'regex']
+boost_modules = ['chrono', 'filesystem', 'thread', 'locale', 'regex', 'json']
 if not get_option('local_boost')
-    boost_dep = dependency('boost', version: '>=1.50.0',
+    boost_dep = dependency('boost', version: '>=1.75.0',
                             modules: boost_modules + ['system'],
                             required: false,
                             static: get_option('default_library') == 'static')
@@ -323,6 +324,27 @@ if not get_option('csri').disabled() and host_machine.system() == 'windows'
 
     csri_sp = subproject('csri')
     deps += csri_sp.get_variable('csri_dep')
+endif
+
+if get_option('enable_update_checker')
+    libcurl_dep = dependency('libcurl', required: false)
+
+    if (not libcurl_dep.found())
+        libcurl_opt = cmake.subproject_options()
+        options_dict = {'HTTP_ONLY': true}
+        if host_machine.system() == 'windows'
+            options_dict += {'CURL_USE_SCHANNEL': true}
+        elif host_machine.system() == 'darwin'
+            options_dict += {'CURL_USE_SECTRANSP': true}
+        else
+            options_dict += {'CURL_USE_OPENSSL': true}
+        endif
+        libcurl_opt.add_cmake_defines(options_dict)
+
+        libcurl = cmake.subproject('curl', options: libcurl_opt)
+        libcurl_dep = libcurl.dependency('libcurl')
+    endif
+    deps += [libcurl_dep]
 endif
 
 acconf = configure_file(output: 'acconf.h', configuration: conf)
