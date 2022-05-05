@@ -51,6 +51,7 @@
 #include "selection_controller.h"
 #include "subs_controller.h"
 #include "video_controller.h"
+#include "video_frame.h"
 #include "utils.h"
 
 #include <libaegisub/dispatch.h>
@@ -197,6 +198,34 @@ namespace {
 			lua_pushnil(L);
 			return 1;
 		}
+	}
+
+	int get_pixel_value(lua_State *L)
+	{
+		const agi::Context *c = get_context(L);
+		int y = lua_tointeger(L, -1);
+		lua_pop(L, 1);
+		int x = lua_tointeger(L, -1);
+		lua_pop(L, 1);
+		int frameNumber = lua_tointeger(L, -1);
+		lua_pop(L, 1);
+		if (c && c->project->Timecodes().IsLoaded()) {
+			std::shared_ptr<VideoFrame> frame = c->videoController->GetFrame(frameNumber);
+
+			if (x < frame->width && y < frame->height) {
+				int pos = (frame->width * y + x)*4;
+
+				// Color expects RGBA, VideoFrames are stored in BGRA.
+				agi::Color* color = new agi::Color(frame->data[pos+2], frame->data[pos+1], frame->data[pos], frame->data[pos+3]);
+				push_value(L, color->GetAssOverrideFormatted());
+			} else {
+				lua_pushnil(L);
+			}
+		} else {
+			lua_pushnil(L);
+		}
+
+		return 1;
 	}
 
 	int get_keyframes(lua_State *L)
@@ -479,6 +508,7 @@ namespace {
 		set_field<frame_from_ms>(L, "frame_from_ms");
 		set_field<ms_from_frame>(L, "ms_from_frame");
 		set_field<video_size>(L, "video_size");
+		set_field<get_pixel_value>(L, "get_pixel_value");
 		set_field<get_keyframes>(L, "keyframes");
 		set_field<decode_path>(L, "decode_path");
 		set_field<cancel_script>(L, "cancel");
