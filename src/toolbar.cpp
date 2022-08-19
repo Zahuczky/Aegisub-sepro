@@ -174,7 +174,7 @@ namespace {
 		, context(c)
 		, ht_context(std::move(ht_context))
 		, retina_helper(parent)
-		, icon_size(OPT_GET("App/Toolbar Icon Size")->GetInt())
+		, icon_size(parent->FromDIP(OPT_GET("App/Toolbar Icon Size")->GetInt()))
 		, icon_size_slot(OPT_SUB("App/Toolbar Icon Size", &Toolbar::OnIconSizeChange, this))
 		, scale_factor_slot(retina_helper.AddScaleFactorListener([=](double scale) {
 			RegenerateToolbar();
@@ -192,7 +192,7 @@ namespace {
 		, ht_context(std::move(ht_context))
 		, retina_helper(parent)
 #ifndef __WXMAC__
-		, icon_size(OPT_GET("App/Toolbar Icon Size")->GetInt())
+		, icon_size(parent->FromDIP(OPT_GET("App/Toolbar Icon Size")->GetInt()))
 		, icon_size_slot(OPT_SUB("App/Toolbar Icon Size", &Toolbar::OnIconSizeChange, this))
 #else
 		, icon_size(32)
