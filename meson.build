@@ -134,7 +134,7 @@ else
     opt_var = cmake.subproject_options()
     opt_var.add_cmake_defines({
         'wxBUILD_INSTALL': false,
-        'wxBUILD_PRECOMP': false,       # otherwise breaks project generation w/ meson
+        'wxBUILD_PRECOMP': 'OFF',       # otherwise breaks project generation w/ meson
         'wxBUILD_SHARED': build_shared,
 
         'wxUSE_WEBVIEW': false,         # breaks build on linux
