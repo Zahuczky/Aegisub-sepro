@@ -50,13 +50,13 @@ jobs:
             name: Ubuntu Debug,
             os: ubuntu-latest,
             buildtype: debugoptimized,
-            args: ''
+            args: --force-fallback-for=wxwidgets
           }
           - {
             name: Ubuntu Release,
             os: ubuntu-latest,
             buildtype: release,
-            args: ''
+            args: --force-fallback-for=wxwidgets
           }
           - name: Ubuntu AppImage
             os: ubuntu-22.04
@@ -67,7 +67,7 @@ jobs:
               --prefix=/usr
               -Dbuild_appimage=true
               -Ddefault_library=static
-              --force-fallback-for=ffms2
+              --force-fallback-for=ffms2,wxwidgets
               -Davisynth=enabled
               -Dbestsource=enabled
               -Dvapoursynth=enabled
@@ -114,14 +114,14 @@ jobs:
           brew install luarocks ninja
           luarocks install luafilesystem 1.8.0
           luarocks install moonscript --dev
-          brew install libass zlib ffms2 fftw hunspell
+          brew install libass zlib ffms2 fftw hunspell wxwidgets
           brew install pulseaudio  # NO OpenAL in github CI
 
       - name: Install dependencies (Linux)
         if: startsWith(matrix.config.os, 'ubuntu-')
         run: |
           sudo apt-get update
-          sudo apt-get install ninja-build build-essential libx11-dev libwxgtk3.0-gtk3-dev libfreetype6-dev pkg-config libfontconfig1-dev libass-dev libasound2-dev libffms2-dev intltool libboost-all-dev libhunspell-dev libuchardet-dev libpulse-dev libopenal-dev libjansson-dev
+          sudo apt-get install ninja-build build-essential libx11-dev libgtk-3-dev libfreetype6-dev pkg-config libfontconfig1-dev libass-dev libasound2-dev libffms2-dev intltool libboost-all-dev libhunspell-dev libuchardet-dev libpulse-dev libopenal-dev libjansson-dev
 
       - name: Configure
         run: meson setup build ${{ matrix.config.args }} -Dbuildtype=${{ matrix.config.buildtype }}
