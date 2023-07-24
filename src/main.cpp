@@ -117,6 +117,10 @@ bool AegisubApp::OnInit() {
 	SetAppName("aegisub");
 #endif
 
+#ifdef __WXMSW__
+	MSWEnableDarkMode();
+#endif
+
 	// The logger isn't created on demand on background threads, so force it to
 	// be created now
 	(void)wxLog::GetActiveTarget();
