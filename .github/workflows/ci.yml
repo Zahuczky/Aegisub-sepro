@@ -123,6 +123,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install ninja-build build-essential libx11-dev libgtk-3-dev libfreetype6-dev pkg-config libfontconfig1-dev libass-dev libasound2-dev libffms2-dev intltool libboost-all-dev libhunspell-dev libuchardet-dev libpulse-dev libopenal-dev libjansson-dev
 
+      - name: Setup ccache
+        if: startsWith(matrix.config.os, 'ubuntu-') || matrix.config.os == 'macos-latest'
+        uses: Chocobo1/setup-ccache-action@v1
+
       - name: Configure
         run: meson setup build ${{ matrix.config.args }} -Dbuildtype=${{ matrix.config.buildtype }}
 
