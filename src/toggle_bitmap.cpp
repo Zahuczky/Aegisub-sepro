@@ -42,7 +42,7 @@
 #include <wx/tglbtn.h>
 
 ToggleBitmap::ToggleBitmap(wxWindow *parent, agi::Context *context, const char *cmd_name, int icon_size, const char *ht_ctx, wxSize const& size)
-: wxControl(parent, -1, wxDefaultPosition, wxDefaultSize, wxSUNKEN_BORDER)
+: wxControl(parent, -1, wxDefaultPosition, wxDefaultSize, wxBORDER_SIMPLE)
 , context(context)
 , command(*cmd::get(cmd_name))
 , img(command.Icon(icon_size))
