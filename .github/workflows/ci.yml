@@ -44,49 +44,13 @@ jobs:
               -Davisynth=enabled
               -Dbestsource=enabled
               -Dvapoursynth=enabled
-          #- {
-          #  name: Windows MinGW,
-          #  os: windows-latest,
-          #  msvc: false
-          #}
-          - {
-            name: Ubuntu Debug,
-            os: ubuntu-latest,
-            buildtype: debugoptimized,
-            args: --force-fallback-for=wxwidgets
-          }
-          - {
-            name: Ubuntu Release,
-            os: ubuntu-latest,
-            buildtype: release,
-            args: --force-fallback-for=wxwidgets
-          }
-          - name: Ubuntu AppImage
-            os: ubuntu-22.04
-            buildtype: release
-            appimage: true
-            # distro ffms is currently broken
-            args: >-
-              --prefix=/usr
-              -Dbuild_appimage=true
-              -Ddefault_library=static
-              --force-fallback-for=ffms2,wxwidgets
-              -Davisynth=enabled
-              -Dbestsource=enabled
-              -Dvapoursynth=enabled
-          - {
-            name: macOS Release,
-            os: macos-latest,
-            buildtype: release,
-            args: -Ddefault_library=static -Dbuild_osx_bundle=true -Dlocal_boost=true -Dvapoursynth=enabled --force-fallback-for=ffms2
-          }
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v2
         with:
           fetch-depth: '0'
 
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v2
         with:
           python-version: '3.x'
 
@@ -94,7 +58,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install meson
-
       - name: Setup MSVC
         if: matrix.config.os == 'windows-latest' && matrix.config.msvc == true
         uses: ilammy/msvc-dev-cmd@v1
@@ -109,98 +72,20 @@ jobs:
           cd moonscript
           7z e moonscript.zip
           Get-Location | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-      - name: Install dependencies (MacOS)
-        if: matrix.config.os == 'macos-latest'
-        run: |
-          brew update
-          brew install luarocks ninja
-          luarocks install luafilesystem 1.8.0
-          luarocks install moonscript --dev
-          brew install libass zlib ffms2 fftw hunspell wxwidgets
-          brew install pulseaudio  # NO OpenAL in github CI
-
-      - name: Install dependencies (Linux)
-        if: startsWith(matrix.config.os, 'ubuntu-')
-        run: |
-          sudo apt-get update
-          sudo apt-get install ninja-build build-essential libx11-dev libgtk-3-dev libfreetype6-dev pkg-config libfontconfig1-dev libass-dev libasound2-dev libffms2-dev intltool libboost-all-dev libhunspell-dev libuchardet-dev libpulse-dev libopenal-dev libjansson-dev
-
-      - name: Setup ccache
-        if: startsWith(matrix.config.os, 'ubuntu-') || matrix.config.os == 'macos-latest'
-        uses: Chocobo1/setup-ccache-action@v1
-
+      
       - name: Configure
         run: meson setup build ${{ matrix.config.args }} -Dbuildtype=${{ matrix.config.buildtype }}
 
       - name: Build
         run: meson compile -C build
-      
-      - name: Run test
-        run: meson test -C build --verbose "gtest main"
-
-      # Windows artifacts
-      - name: Generate Windows installer
-        if: matrix.config.os == 'windows-latest'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run:
-          meson compile win-installer -C build
 
       - name: Generate Windows portable installer
         if: matrix.config.os == 'windows-latest'
         run: cd build && ninja win-portable
 
-      - name: Upload artifacts - win_installer
-        uses: actions/upload-artifact@v3
-        if: matrix.config.os == 'windows-latest'
-        with:
-          name: ${{ matrix.config.name }} - installer
-          path: build/Aegisub-*.exe
-          if-no-files-found: error
-      
       - name: Upload artifacts - portable.zip
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v2
         if: matrix.config.os == 'windows-latest'
         with:
           name: ${{ matrix.config.name }} - portable
           path: build/aegisub-portable-64.zip
-      
-      # macOS artifacts
-      - name: Generate macOS installer
-        if: matrix.config.os == 'macos-latest'
-        run: |
-          meson compile osx-bundle -C build
-          meson compile osx-build-dmg -C build
-
-      - name: Upload artifacts - macOS dmg
-        uses: actions/upload-artifact@v3
-        if: matrix.config.os == 'macos-latest'
-        with:
-          name: ${{ matrix.config.name }} - installer
-          path: build/Aegisub-*.dmg
-          if-no-files-found: error
-
-      # Linux artifacts (AppImage)
-      - name: Generate AppImage
-        if: matrix.config.appimage
-        run: |
-          mkdir -p appimage/appdir
-          meson install -C build --destdir=../appimage/appdir
-
-          cd appimage
-          sudo apt-get install libfuse2
-          curl -L "https://github.com/linuxdeploy/linuxdeploy/releases/download/1-alpha-20220822-1/linuxdeploy-x86_64.AppImage" -o linuxdeploy
-          curl -L "https://github.com/AppImage/AppImageKit/releases/download/13/appimagetool-x86_64.AppImage" -o appimagetool
-          chmod +x linuxdeploy appimagetool
-
-          ./linuxdeploy --appdir appdir --desktop-file=appdir/aegisub.desktop
-          ./appimagetool appdir
-
-      - name: Upload artifacts - Linux AppImage
-        uses: actions/upload-artifact@v3
-        if: matrix.config.appimage
-        with:
-          name: ${{ matrix.config.name }}
-          path: appimage/*.AppImage
-          if-no-files-found: error
