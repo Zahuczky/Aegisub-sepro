@@ -73,9 +73,9 @@ void ToggleBitmap::OnPaint(wxPaintEvent &) {
 	wxColour bgColor = command.IsActive(context) ? wxColour(0,255,0) : wxColour(255,0,0);
 	wxColor sysCol = wxSystemSettings::GetColour(wxSYS_COLOUR_BTNHIGHLIGHT);
 	bgColor.Set(
-		(sysCol.Red() + bgColor.Red()) / 2,
-		(sysCol.Green() + bgColor.Green()) / 2,
-		(sysCol.Blue() + bgColor.Blue()) / 2);
+		(sysCol.Red() + bgColor.Red()) / 4,
+		(sysCol.Green() + bgColor.Green()) / 4,
+		(sysCol.Blue() + bgColor.Blue()) / 4);
 
 	dc.SetPen(*wxTRANSPARENT_PEN);
 	dc.SetBrush(wxBrush(bgColor));
