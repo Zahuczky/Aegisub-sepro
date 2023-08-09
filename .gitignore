@@ -47,3 +47,4 @@ subprojects/dirent-*
 subprojects/hunspell-*
 subprojects/uchardet-*
 subprojects/vapoursynth
+src/bitmaps/button/.deletescales.py
