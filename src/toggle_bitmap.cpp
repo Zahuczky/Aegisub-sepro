@@ -70,7 +70,7 @@ void ToggleBitmap::OnPaint(wxPaintEvent &) {
 	wxAutoBufferedPaintDC dc(this);
 
 	// Get background color
-	wxColour bgColor = command.IsActive(context) ? wxColour(0, 150, 0) : wxColour(150, 0, 0);
+	wxColour bgColor = command.IsActive(context) ? wxColour(0,255,0) : wxColour(255,0,0);
 	wxColor sysCol = wxSystemSettings::GetColour(wxSYS_COLOUR_BTNHIGHLIGHT);
 	bgColor.Set(
 		(sysCol.Red() + bgColor.Red()) / 2,
